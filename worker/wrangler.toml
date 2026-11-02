@@ -1,0 +1,8 @@
+name = "amazonlist"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "KV"
+id = "4548232ae561454bb29f6c0045fa5056"

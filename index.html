@@ -1,9 +1,516 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AmazonList</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#1a2b40;font:16px system-ui,sans-serif}header{background:#172b49;color:white;padding:24px}header h1{margin:0}main{max-width:820px;margin:24px auto;padding:0 16px}.card{background:white;padding:22px;border-radius:16px;margin:15px 0;box-shadow:0 3px 20px #10223b12}input,select{width:100%;padding:12px;margin:7px 0 15px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}label{font-weight:650}button{padding:12px 16px;border:0;border-radius:9px;background:#ffb73d;color:#18283c;font-weight:750;cursor:pointer;margin:4px}button.secondary{background:#e8edf5}nav{display:flex;gap:8px}.hidden{display:none}.item{border:1px solid #e1e7f0;border-radius:12px;padding:15px;margin:10px 0}.muted{color:#64748b;font-size:14px}.notice{background:#fff4d8;padding:14px;border-radius:10px}a{color:#155eaa}.cataloggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px}.product{border:1px solid #e1e7f0;border-radius:12px;padding:12px}.product img{width:100%;height:150px;object-fit:contain}.product h3{font-size:15px;line-height:1.3}.product button{width:100%;margin:0}.product strong{display:block;margin:8px 0}</style><link rel="manifest" href="./manifest.webmanifest"></head><body><header><h1>🛍️ AmazonList</h1><p>Kids choose. Parents approve.</p></header><main><nav><button onclick="tab('kids')">Kids</button><button class="secondary" onclick="parent()">Parent 🔒</button></nav><section id="kids"><div class="card"><h2>🛍️ Shop</h2><p class="muted">Search products without leaving AmazonList. Live Amazon listings require a configured authorized catalog provider.</p><form id="searchForm"><label>Search products</label><input id="searchTerm" placeholder="Toys, baseball gloves, headphones..." required maxlength="100"><button type="submit">Search products</button></form><div class="shopcats"><button type="button" class="secondary" data-query="toys">🧸 Toys</button><button type="button" class="secondary" data-query="games">🎮 Games</button><button type="button" class="secondary" data-query="sports">⚾ Sports</button><button type="button" class="secondary" data-query="books">📚 Books</button><button type="button" class="secondary" data-query="clothing">👕 Clothes</button></div><p id="catalogMessage" class="muted" role="status">Search for an item to get started.</p><div id="catalogResults" class="cataloggrid"></div></div><div class="card"><h2>Add a wish</h2><p class="muted">Find something on Amazon, copy the product link, and paste it here.</p><form id="form"><label>Child</label><select id="child"></select><label>Product name</label><input id="name" required maxlength="120" placeholder="LEGO set"><label>Amazon product URL</label><input id="url" required type="url" placeholder="https://www.amazon.com/dp/..."><label>Note (optional)</label><input id="note" maxlength="180" placeholder="The blue one!"><button>Add to wishlist</button></form></div><div class="card"><h2>My wishes</h2><div id="kidItems"></div></div></section><section id="parents" class="hidden"><div class="card"><h2>Parent dashboard</h2><p class="notice">Amazon does not offer a general public API for automatically adding products to personal Amazon carts or lists. Open approved products on Amazon and add them there. No checkout occurs here.</p><button onclick="addChild()">Add child</button><button class="secondary" onclick="changePin()">Change PIN</button><button class="secondary" onclick="exportData()">Export</button><button class="secondary" onclick="lock()">Lock</button></div><div class="card"><h2>Requests</h2><div id="allItems"></div></div></section><p class="muted">Prototype: requests are stored only in this browser, not synced between devices. The PIN is not secure authentication. For real family use, add accounts and a cloud database.</p></main><script>
-const CATALOG_ENDPOINT='./catalog-config.json';let catalogUrl=null;
-fetch(CATALOG_ENDPOINT).then(r=>r.ok?r.json():null).then(c=>{if(c&&typeof c.endpoint==='string'&&c.endpoint.startsWith('https://'))catalogUrl=c.endpoint}).catch(()=>{});
-async function shop(q){const msg=document.getElementById('catalogMessage'),results=document.getElementById('catalogResults');results.replaceChildren();if(!catalogUrl){msg.textContent='Live product shopping is not connected yet. An authorized Amazon product catalog API is required. You can still add a product link below.';return}msg.textContent='Searching…';try{const u=new URL(catalogUrl);u.searchParams.set('q',q);const res=await fetch(u);if(!res.ok)throw Error('Catalog unavailable');const data=await res.json();if(!Array.isArray(data.products))throw Error('Invalid catalog response');const products=data.products.filter(p=>p&&typeof p.title==='string'&&typeof p.url==='string'&&validUrl(p.url));msg.textContent=products.length?products.length+' products found':'No products found';for(const p of products){const card=document.createElement('article');card.className='product';const img=document.createElement('img');img.alt='';if(typeof p.image==='string'&&p.image.startsWith('https://'))img.src=p.image;card.append(img);const title=document.createElement('h3');title.textContent=p.title;card.append(title);const price=document.createElement('strong');price.textContent=typeof p.price==='string'?p.price:'Price unavailable';card.append(price);const button=document.createElement('button');button.textContent='Add to my list';button.onclick=()=>{d.items.unshift({id:crypto.randomUUID(),child:document.getElementById('child').value,name:p.title,url:validUrl(p.url),note:'',status:'Requested'});save();button.textContent='Added ✓'};card.append(button);results.append(card)}}catch(e){msg.textContent='Product search is unavailable right now. Try again later.'}}
-document.getElementById('searchForm').onsubmit=e=>{e.preventDefault();shop(document.getElementById('searchTerm').value.trim())};
-document.querySelector('.shopcats').onclick=e=>{const b=e.target.closest('button[data-query]');if(b){document.getElementById('searchTerm').value=b.dataset.query;shop(b.dataset.query)}};
-const K='amazonlist_data',P='amazonlist_pin';let d=JSON.parse(localStorage.getItem(K)||'null')||{children:['Child 1'],items:[]},authorized=false;const $=id=>document.getElementById(id);function save(){localStorage.setItem(K,JSON.stringify(d));render()}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;':'&quot;',"'":'&#39;'}[c]))}function validUrl(raw){try{const u=new URL(raw);if(!/(^|\.)amazon\.com$/.test(u.hostname))return null;const m=u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i);return m?'https://www.amazon.com/dp/'+m[1].toUpperCase():null}catch{return null}}function tab(t){$('kids').classList.toggle('hidden',t!=='kids');$('parents').classList.toggle('hidden',t!=='parents');render()}function parent(){if(!localStorage.getItem(P)){const p=prompt('Create a parent PIN (4+ digits)');if(!/^\d{4,}$/.test(p||''))return;localStorage.setItem(P,p)}if(!authorized){if(prompt('Parent PIN')!==localStorage.getItem(P)){alert('Wrong PIN');return}authorized=true}tab('parents')}function lock(){authorized=false;tab('kids')}function addChild(){if(!authorized)return;const n=prompt('Child name');if(n&&n.trim()&&!d.children.includes(n.trim())){d.children.push(n.trim().slice(0,50));save()}}function changePin(){if(!authorized)return;const p=prompt('New PIN (4+ digits)');if(/^\d{4,}$/.test(p||''))localStorage.setItem(P,p)}$('form').onsubmit=e=>{e.preventDefault();const url=validUrl($('url').value);if(!url){alert('Use an Amazon.com product link with /dp/ or /gp/product/');return}d.items.unshift({id:crypto.randomUUID(),child:$('child').value,name:$('name').value.trim(),url,note:$('note').value.trim(),status:'Requested'});save();$('form').reset()};function status(id,s){if(!authorized)return;const x=d.items.find(x=>x.id===id);if(x){x.status=s;save()}}function remove(id){if(!authorized||!confirm('Delete this request?'))return;d.items=d.items.filter(x=>x.id!==id);save()}function exportData(){if(!authorized)return;const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='amazonlist.json';a.click();URL.revokeObjectURL(a.href)}function card(x,admin){return '<div class="item"><strong>'+esc(x.name)+'</strong><p class="muted">'+esc(x.child)+' · '+esc(x.status)+' · '+esc(x.note)+'</p><a target="_blank" rel="noopener noreferrer" href="'+esc(x.url)+'">Open on Amazon ↗</a>'+(admin?'<p><button data-id="'+esc(x.id)+'" data-status="Approved">Approve</button><button data-id="'+esc(x.id)+'" data-status="Purchased">Purchased</button><button data-id="'+esc(x.id)+'" data-status="Declined">Decline</button><button class="secondary" data-delete="'+esc(x.id)+'">Delete</button></p>':'')+'</div>'}function render(){const old=$('child').value;$('child').innerHTML=d.children.map(x=>'<option>'+esc(x)+'</option>').join('');if(d.children.includes(old))$('child').value=old;$('kidItems').innerHTML=d.items.filter(x=>x.child===$('child').value).map(x=>card(x,false)).join('')||'<p>No wishes yet.</p>';$('allItems').innerHTML=d.items.map(x=>card(x,true)).join('')||'<p>No requests yet.</p>'}$('child').onchange=render;$('allItems').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.id)status(b.dataset.id,b.dataset.status);if(b.dataset.delete)remove(b.dataset.delete)};render();
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#172b49">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wish List">
+<title>AmazonList — Family Wish List</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./icon-192.png">
+<style>
+:root{--navy:#172b49;--navy2:#22406b;--amber:#ffb73d;--amber2:#ffd27f;--bg:#f3f5f9;--ink:#15243a;--muted:#62738a;--line:#e1e7f0;--ok:#1f9d55;--bad:#c2410c;--blue:#2563eb;--r:16px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;position:sticky;top:0;z-index:5;box-shadow:0 2px 14px #0003}
+.bar{max-width:760px;margin:auto;display:flex;align-items:center;gap:10px}
+.brand{font-weight:800;font-size:20px;flex:1;display:flex;align-items:center;gap:8px}
+.brand small{font-weight:500;opacity:.7;font-size:13px}
+main{max-width:760px;margin:0 auto;padding:14px 14px 90px}
+.card{background:#fff;border-radius:var(--r);padding:18px;margin:12px 0;box-shadow:0 2px 14px #10223b10}
+h2{margin:0 0 10px;font-size:19px}
+h3{margin:0;font-size:16px}
+.muted{color:var(--muted);font-size:14px}
+label{display:block;font-weight:650;font-size:14px;margin:10px 0 4px}
+input,textarea,select{width:100%;padding:12px;border:1.5px solid #cbd5e1;border-radius:11px;font:inherit;background:#fff;color:inherit}
+textarea{resize:vertical;min-height:70px}
+input:focus,textarea:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px #ffb73d44}
+button{font:inherit;font-weight:750;border:0;border-radius:11px;padding:12px 16px;cursor:pointer;background:var(--amber);color:#1a2738;transition:transform .08s}
+button:active{transform:scale(.97)}
+button.ghost{background:#e9eef6;color:var(--ink)}
+button.navy{background:var(--navy);color:#fff}
+button.small{padding:8px 12px;font-size:14px;border-radius:9px}
+button.danger{background:#fde8e1;color:var(--bad)}
+button:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:0 0 auto}
+.grow{flex:1 1 0!important;min-width:0}
+.full{width:100%}
+.hidden{display:none!important}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;background:#fff;border:1.5px solid var(--line);color:var(--ink);border-radius:999px;padding:9px 14px;font-weight:650;font-size:15px}
+.chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.kid{display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:2px solid var(--line);border-radius:16px;padding:12px 10px;min-width:92px;font-weight:700;color:var(--ink)}
+.kid .av{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:20px;color:#fff}
+.kid.on{border-color:var(--amber);box-shadow:0 0 0 3px #ffb73d55}
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.cats button{background:#f1f4f9;color:var(--ink);padding:10px 4px;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.cats b{font-size:22px}
+.steps{margin:6px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
+.stars{display:flex;gap:6px}
+.stars button{flex:1;background:#f1f4f9;color:var(--ink);font-size:13px;padding:10px 6px}
+.stars button.on{background:var(--amber2);box-shadow:inset 0 0 0 2px var(--amber)}
+.item{border:1.5px solid var(--line);border-radius:14px;padding:13px;margin:10px 0;background:#fff}
+.item .top{display:flex;gap:10px;align-items:flex-start}
+.item .name{font-weight:750;flex:1;word-break:break-word}
+.badge{font-size:12px;font-weight:800;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.b-Requested{background:#e0ecff;color:#1d4ed8}
+.b-Approved{background:#fff1d0;color:#9a5b00}
+.b-Purchased{background:#dcf5e5;color:#13703a}
+.b-Declined{background:#f1f1f1;color:#6b7280}
+.meta{font-size:13px;color:var(--muted);margin:4px 0 8px}
+.note{background:#f7f9fc;border-radius:9px;padding:8px 10px;font-size:14px;margin:6px 0}
+a.amz{color:var(--blue);font-weight:700;text-decoration:none}
+.empty{text-align:center;color:var(--muted);padding:22px 8px}
+.empty b{font-size:34px;display:block}
+.toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(120px);background:var(--navy);color:#fff;padding:12px 18px;border-radius:12px;font-weight:650;transition:transform .25s;z-index:20;max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.tabs{display:flex;background:#ffffff1c;border-radius:12px;padding:3px}
+.tabs button{background:transparent;color:#fff;padding:8px 12px;font-size:14px}
+.tabs button.on{background:#fff;color:var(--navy)}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.stat div{background:#f4f7fb;border-radius:12px;padding:10px 4px;font-size:12px;color:var(--muted)}
+.stat b{display:block;font-size:22px;color:var(--ink)}
+.code{font:700 22px ui-monospace,Menlo,monospace;letter-spacing:3px;background:#f4f7fb;border-radius:10px;padding:10px;text-align:center}
+.kidrow{display:flex;gap:8px;margin:6px 0}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.safe{background:#fff7e6;border:1px solid #ffe2a8;border-radius:12px;padding:12px;font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="brand">🎁 Wish List <small id="famLabel"></small></div>
+  <div class="tabs hidden" id="tabs"><button id="tabKids" class="on">Kids</button><button id="tabParent">Parent 🔒</button></div>
+</div></header>
+
+<main>
+<!-- ============ SETUP ============ -->
+<section id="setup" class="hidden">
+  <div class="card">
+    <h2>👋 Welcome</h2>
+    <p class="muted">Kids look at stuff on Amazon and add it to their wish list here. There's no cart and no checkout — a parent sees every list on their own phone.</p>
+  </div>
+  <div class="card">
+    <h2>Join your family</h2>
+    <label for="joinCode">Family code</label>
+    <input id="joinCode" maxlength="8" autocapitalize="characters" autocomplete="off" placeholder="ABCD2345">
+    <button class="navy full" id="joinBtn" style="margin-top:12px">Join</button>
+  </div>
+  <div class="card">
+    <h2>Parent: start a new family</h2>
+    <label for="newKids">Kids' names (one per line)</label>
+    <textarea id="newKids" placeholder="Peyton&#10;Jordan"></textarea>
+    <label for="newPin">Parent PIN (4–8 digits)</label>
+    <input id="newPin" inputmode="numeric" pattern="\d*" maxlength="8" type="password" autocomplete="new-password">
+    <button class="full" id="createBtn" style="margin-top:12px">Create family</button>
+  </div>
+</section>
+
+<!-- ============ KIDS ============ -->
+<section id="kids" class="hidden">
+  <div class="card">
+    <h2>Who's shopping?</h2>
+    <div class="chips" id="kidPicker"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔎 Look on Amazon</h2>
+    <form id="amzSearch" class="row">
+      <input id="amzQ" class="grow" placeholder="LEGO, baseball bat, headphones…" maxlength="100" enterkeyhint="search" style="width:auto">
+      <button>Search</button>
+    </form>
+    <div class="cats" id="cats">
+      <button data-q="toys"><b>🧸</b>Toys</button>
+      <button data-q="lego"><b>🧱</b>LEGO</button>
+      <button data-q="video games"><b>🎮</b>Games</button>
+      <button data-q="youth baseball"><b>⚾</b>Baseball</button>
+      <button data-q="books for kids"><b>📚</b>Books</button>
+      <button data-q="kids clothes"><b>👕</b>Clothes</button>
+      <button data-q="art supplies kids"><b>🎨</b>Art</button>
+      <button data-q="kids tech gadgets"><b>🎧</b>Tech</button>
+    </div>
+    <ol class="steps">
+      <li>Find something you like on Amazon.</li>
+      <li>Tap <b>Share</b> → <b>Copy</b> (or copy the web address).</li>
+      <li>Come back here and tap <b>Paste link</b>.</li>
+    </ol>
+  </div>
+
+  <div class="card" id="addCard">
+    <h2>➕ Add to <span id="addWho">my</span> list</h2>
+    <button class="navy full" id="pasteBtn" type="button">📋 Paste link</button>
+    <form id="addForm">
+      <label for="link">Amazon link</label>
+      <textarea id="link" rows="2" placeholder="https://a.co/d/… or https://www.amazon.com/dp/…" required></textarea>
+      <label for="itemName">What is it?</label>
+      <input id="itemName" maxlength="140" placeholder="Blue LEGO race car" required>
+      <label>How much do you want it?</label>
+      <div class="stars" id="stars">
+        <button type="button" data-p="1">⭐<br>Kinda</button>
+        <button type="button" data-p="2" class="on">⭐⭐<br>Really</button>
+        <button type="button" data-p="3">⭐⭐⭐<br>Most!</button>
+      </div>
+      <label for="itemNote">Note (size, color…) — optional</label>
+      <input id="itemNote" maxlength="200" placeholder="Size youth medium, the red one">
+      <button class="full" id="addBtn" style="margin-top:14px">Add to wish list</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="row"><h2 class="grow" id="myTitle">My wish list</h2><span class="muted" id="myCount"></span></div>
+    <div id="myItems"></div>
+  </div>
+</section>
+
+<!-- ============ PARENT ============ -->
+<section id="parent" class="hidden">
+  <div class="card" id="pinCard">
+    <h2>🔒 Parent view</h2>
+    <form id="pinForm">
+      <label for="pin">Parent PIN</label>
+      <input id="pin" inputmode="numeric" pattern="\d*" maxlength="8" type="password" autocomplete="current-password">
+      <button class="navy full" style="margin-top:12px">Unlock</button>
+    </form>
+  </div>
+
+  <div id="parentBody" class="hidden">
+    <div class="card">
+      <div class="stat" id="stats"></div>
+      <label>Kid</label>
+      <div class="chips" id="pKid"></div>
+      <label>Show</label>
+      <div class="chips" id="pStatus"></div>
+      <div class="row" style="margin-top:6px">
+        <label class="grow" style="margin:0">Sort</label>
+        <select id="pSort" style="width:auto"><option value="new">Newest</option><option value="want">Most wanted</option><option value="kid">By kid</option></select>
+      </div>
+    </div>
+    <div class="card"><div id="pItems"></div></div>
+
+    <div class="card">
+      <h2>⚙️ Family settings</h2>
+      <label>Family code</label>
+      <div class="code" id="famCode"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="small ghost grow" id="shareKid">Share kids' link</button>
+        <button class="small ghost grow" id="shareParent">Copy parent link</button>
+      </div>
+      <hr>
+      <h3>Kids</h3>
+      <div id="kidEdit"></div>
+      <div class="row" style="margin-top:8px"><input id="newKid" class="grow" placeholder="Add a kid" maxlength="50" style="width:auto"><button class="small" id="addKid">Add</button></div>
+      <button class="small navy" id="saveKids" style="margin-top:10px">Save kids</button>
+      <hr>
+      <h3>Change PIN</h3>
+      <div class="row" style="margin-top:8px"><input id="newPin2" class="grow" type="password" inputmode="numeric" maxlength="8" placeholder="New PIN" style="width:auto"><button class="small" id="savePin">Save</button></div>
+      <hr>
+      <div class="safe">💡 This app can't buy anything. For extra safety, keep your kids' devices signed out of Amazon (or use Amazon's Parent Dashboard) so the Amazon app itself can't check out.</div>
+      <div class="row" style="margin-top:12px">
+        <button class="small ghost" id="lockBtn">Lock</button>
+        <button class="small ghost" id="leaveBtn">Use a different family</button>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+const qs = new URLSearchParams(location.search);
+const apiOverride = qs.get('api');
+const API = (apiOverride && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(apiOverride)) ? apiOverride : 'https://amazonlist.kollinmeubanks.workers.dev';
+const $ = id => document.getElementById(id);
+const COLORS = ['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316'];
+const EMOJI = {1:'⭐',2:'⭐⭐',3:'⭐⭐⭐'};
+const ls = {
+  get: k => { try { return localStorage.getItem(k) } catch { return null } },
+  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v) } catch {} },
+};
+let code = ls.get('al_code');
+let me = ls.get('al_kid');
+let data = { children: [], items: [] };
+let pin = null; try { pin = sessionStorage.getItem('al_pin') } catch {}
+let view = 'kids', priority = 2, pKid = 'All', pStat = 'Open';
+
+// ---------- helpers ----------
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e[k] = v; else if (v != null) e.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c));
+  return e;
+}
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (opts.parent) headers['X-Parent-Pin'] = pin || '';
+  const res = await fetch(API + path, { method: opts.method || 'GET', headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(j.error || 'Something went wrong'); e.status = res.status; throw e; }
+  return j;
+}
+function ago(t) {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago'; if (s < 86400 * 30) return Math.floor(s / 86400) + 'd ago';
+  return new Date(t).toLocaleDateString();
+}
+const colorFor = name => COLORS[Math.max(0, data.children.indexOf(name)) % COLORS.length];
+function splitShare(text) {
+  // Amazon's Share text is usually "Product title https://a.co/d/xyz" — pull the title out too.
+  const m = text.match(/https?:\/\/\S+/);
+  if (!m) return { url: '', title: '' };
+  let title = text.replace(m[0], '').replace(/\s+/g, ' ').trim();
+  title = title.replace(/^(check out|i found|look at)( this)?( on amazon)?[:!,]?\s*/i, '').replace(/^["“]|["”]$/g, '').replace(/\s*[-|:]\s*$/, '');
+  if (/^amazon(\.com)?$/i.test(title)) title = '';
+  return { url: m[0], title: title.slice(0, 140) };
+}
+
+// ---------- views ----------
+function show(v) {
+  view = v;
+  if (v !== 'setup') ls.set('al_view', v);
+  for (const s of ['setup', 'kids', 'parent']) $(s).classList.toggle('hidden', s !== v);
+  $('tabs').classList.toggle('hidden', v === 'setup');
+  $('tabKids').classList.toggle('on', v === 'kids');
+  $('tabParent').classList.toggle('on', v === 'parent');
+  $('famLabel').textContent = '';
+  render();
+  window.scrollTo(0, 0);
+}
+function render() {
+  if (view === 'kids') renderKids();
+  if (view === 'parent') renderParent();
+}
+
+function itemCard(x, admin) {
+  const link = el('a', { class: 'amz', href: x.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open on Amazon ↗');
+  const card = el('div', { class: 'item' },
+    el('div', { class: 'top' },
+      admin ? el('span', { class: 'badge', style: `background:${colorFor(x.child)};color:#fff` }, x.child) : null,
+      el('div', { class: 'name' }, x.name),
+      el('span', { class: 'badge b-' + x.status }, x.status === 'Requested' ? (admin ? 'New' : 'Waiting') : x.status)),
+    el('div', { class: 'meta' }, (EMOJI[x.priority] || '') + ' · added ' + ago(x.added)),
+    x.note ? el('div', { class: 'note' }, '📝 ' + x.note) : null,
+    x.parentNote ? el('div', { class: 'note' }, '👪 ' + x.parentNote) : null,
+  );
+  const actions = el('div', { class: 'row', style: 'margin-top:8px' }, link);
+  if (admin) {
+    const btn = (label, cls, fn) => el('button', { class: 'small ' + cls, onclick: fn }, label);
+    const set = s => () => parentAct(`/items/${x.id}`, 'PATCH', { status: s }, s === 'Purchased' ? 'Marked purchased 🎉' : 'Updated');
+    actions.append(el('span', { class: 'grow' }));
+    if (x.status !== 'Approved') actions.append(btn('👍 Approve', '', set('Approved')));
+    if (x.status !== 'Purchased') actions.append(btn('✅ Bought', 'ghost', set('Purchased')));
+    if (x.status !== 'Declined') actions.append(btn('✋ No', 'ghost', set('Declined')));
+    if (x.status !== 'Requested') actions.append(btn('↺', 'ghost', set('Requested')));
+    actions.append(btn('💬', 'ghost', () => {
+      const n = prompt('Note for ' + x.child + ' (they can see it)', x.parentNote || '');
+      if (n !== null) parentAct(`/items/${x.id}`, 'PATCH', { parentNote: n }, 'Note saved');
+    }));
+    actions.append(btn('🗑', 'danger', () => { if (confirm('Delete "' + x.name + '"?')) parentAct(`/items/${x.id}`, 'DELETE', null, 'Deleted'); }));
+  } else if (x.status === 'Requested') {
+    actions.append(el('span', { class: 'grow' }), el('button', { class: 'small ghost', onclick: () => kidRemove(x) }, 'Remove'));
+  }
+  card.append(actions);
+  return card;
+}
+
+function renderKids() {
+  if (data.children.length && !data.children.includes(me)) me = data.children[0];
+  const picker = $('kidPicker'); picker.replaceChildren();
+  for (const k of data.children) {
+    picker.append(el('button', { class: 'kid' + (k === me ? ' on' : ''), onclick: () => { me = k; ls.set('al_kid', k); renderKids(); } },
+      el('span', { class: 'av', style: 'background:' + colorFor(k) }, k[0].toUpperCase()), k));
+  }
+  $('addWho').textContent = me ? me + "'s" : 'my';
+  $('myTitle').textContent = me ? me + "'s wish list" : 'My wish list';
+  const mine = data.items.filter(x => x.child === me);
+  $('myCount').textContent = mine.length ? mine.length + ' item' + (mine.length > 1 ? 's' : '') : '';
+  const box = $('myItems'); box.replaceChildren();
+  if (!mine.length) box.append(el('div', { class: 'empty' }, el('b', {}, '🌟'), 'Nothing here yet — find something on Amazon and add it!'));
+  const order = { Requested: 0, Approved: 1, Purchased: 2, Declined: 3 };
+  for (const x of [...mine].sort((a, b) => order[a.status] - order[b.status] || b.added - a.added)) box.append(itemCard(x, false));
+}
+
+function renderParent() {
+  const unlocked = !!pin;
+  $('pinCard').classList.toggle('hidden', unlocked);
+  $('parentBody').classList.toggle('hidden', !unlocked);
+  if (!unlocked) { setTimeout(() => $('pin').focus(), 50); return; }
+  const cnt = s => data.items.filter(x => x.status === s && (pKid === 'All' || x.child === pKid)).length;
+  $('stats').replaceChildren(...[['New', 'Requested'], ['Approved', 'Approved'], ['Bought', 'Purchased'], ['No', 'Declined']]
+    .map(([l, s]) => el('div', {}, el('b', {}, String(cnt(s))), l)));
+  if (pKid !== 'All' && !data.children.includes(pKid)) pKid = 'All';
+  $('pKid').replaceChildren(...['All', ...data.children].map(k =>
+    el('button', { class: 'chip' + (pKid === k ? ' on' : ''), onclick: () => { pKid = k; renderParent(); } }, k)));
+  const statuses = [['Open', 'New + Approved'], ['Requested', 'New'], ['Approved', 'Approved'], ['Purchased', 'Bought'], ['Declined', 'Declined'], ['All', 'Everything']];
+  $('pStatus').replaceChildren(...statuses.map(([v, l]) =>
+    el('button', { class: 'chip' + (pStat === v ? ' on' : ''), onclick: () => { pStat = v; renderParent(); } }, l)));
+  let list = data.items.filter(x => (pKid === 'All' || x.child === pKid) &&
+    (pStat === 'All' || (pStat === 'Open' ? ['Requested', 'Approved'].includes(x.status) : x.status === pStat)));
+  const sort = $('pSort').value;
+  list.sort((a, b) => sort === 'want' ? (b.priority - a.priority || b.added - a.added)
+    : sort === 'kid' ? (data.children.indexOf(a.child) - data.children.indexOf(b.child) || b.added - a.added)
+    : b.added - a.added);
+  const box = $('pItems'); box.replaceChildren();
+  if (!list.length) box.append(el('div', { class: 'empty' }, el('b', {}, '📭'), 'Nothing to show here.'));
+  for (const x of list) box.append(itemCard(x, true));
+  $('famCode').textContent = code;
+  renderKidEdit();
+}
+
+let kidDraft = null, draftDirty = false;
+function renderKidEdit() {
+  if (!kidDraft) { if (!data.children.length) return; kidDraft = data.children.map(n => ({ from: n, name: n })); }
+  $('kidEdit').replaceChildren(...kidDraft.map((k, i) => el('div', { class: 'kidrow' },
+    el('input', { value: k.name, maxlength: 50, oninput: e => { k.name = e.target.value; draftDirty = true; } }),
+    el('button', { class: 'small danger', onclick: () => {
+      const n = data.items.filter(x => x.child === k.from).length;
+      if (n && !confirm(k.name + ' has ' + n + ' item(s). Their items stay but will be hidden. Remove?')) return;
+      kidDraft.splice(i, 1); draftDirty = true; renderKidEdit();
+    } }, '✕'))));
+}
+
+// ---------- data ----------
+async function load(quiet) {
+  if (!code) return;
+  try {
+    const j = await api(`/api/f/${code}`);
+    data = j; if (!draftDirty) kidDraft = null; render();
+  } catch (e) {
+    if (e.status === 404) { toast('Family code not found'); leave(); }
+    else if (!quiet) toast('Can’t reach the list — check your internet');
+  }
+}
+async function parentAct(path, method, body, msg) {
+  try {
+    data = await api(`/api/f/${code}${path}`, { method, body, parent: true });
+    if (msg) toast(msg);
+    render();
+    return true;
+  } catch (e) {
+    if (e.status === 401) { pin = null; try { sessionStorage.removeItem('al_pin') } catch {} ; render(); }
+    toast(e.message);
+    return false;
+  }
+}
+async function kidRemove(x) {
+  if (!confirm('Remove "' + x.name + '" from your list?')) return;
+  try { data = await api(`/api/f/${code}/items/${x.id}`, { method: 'DELETE' }); render(); toast('Removed'); }
+  catch (e) { toast(e.message); }
+}
+function leave() { code = null; ls.set('al_code', null); pin = null; try { sessionStorage.removeItem('al_pin') } catch {} show('setup'); }
+function join(c) { code = c; ls.set('al_code', c); }
+
+// ---------- events ----------
+$('tabKids').onclick = () => show('kids');
+$('tabParent').onclick = () => show('parent');
+
+$('joinBtn').onclick = async () => {
+  const c = $('joinCode').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (c.length !== 8) return toast('Family codes are 8 letters/numbers');
+  try { data = await api(`/api/f/${c}`); join(c); show('kids'); toast('Joined!'); }
+  catch (e) { toast(e.status === 404 ? 'Family code not found' : e.message); }
+};
+$('createBtn').onclick = async () => {
+  const kids = $('newKids').value.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  const p = $('newPin').value.trim();
+  if (!kids.length) return toast('Add at least one kid');
+  if (!/^\d{4,8}$/.test(p)) return toast('PIN must be 4–8 digits');
+  $('createBtn').disabled = true;
+  try {
+    const j = await api('/api/family', { method: 'POST', body: { pin: p, children: kids } });
+    join(j.code); data = j; pin = p; try { sessionStorage.setItem('al_pin', p) } catch {}
+    show('parent'); toast('Family created! Share the kids’ link below.');
+  } catch (e) { toast(e.message); }
+  $('createBtn').disabled = false;
+};
+
+const amazonSearch = q => window.open('https://www.amazon.com/s?k=' + encodeURIComponent(q), '_blank', 'noopener');
+$('amzSearch').onsubmit = e => { e.preventDefault(); const q = $('amzQ').value.trim(); if (q) amazonSearch(q); };
+$('cats').onclick = e => { const b = e.target.closest('button[data-q]'); if (b) amazonSearch(b.dataset.q); };
+
+function takeLink(text) {
+  const { url, title } = splitShare(text);
+  if (!url) { toast('That doesn’t have a link in it'); return; }
+  $('link').value = url;
+  if (title && !$('itemName').value.trim()) $('itemName').value = title;
+  if (!$('itemName').value.trim()) $('itemName').focus();
+}
+$('pasteBtn').onclick = async () => {
+  try { const t = await navigator.clipboard.readText(); if (!t) throw 0; takeLink(t); }
+  catch { $('link').focus(); toast('Tap the box and choose Paste'); }
+};
+$('link').addEventListener('paste', e => {
+  const t = (e.clipboardData || window.clipboardData)?.getData('text');
+  if (t && /https?:\/\//.test(t)) { e.preventDefault(); takeLink(t); }
+});
+$('stars').onclick = e => {
+  const b = e.target.closest('button[data-p]'); if (!b) return;
+  priority = +b.dataset.p;
+  for (const x of $('stars').children) x.classList.toggle('on', x === b);
+};
+$('addForm').onsubmit = async e => {
+  e.preventDefault();
+  if (!me) return toast('Pick who is shopping first');
+  const btn = $('addBtn'); btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    const j = await api(`/api/f/${code}/items`, { method: 'POST', body: {
+      child: me, url: $('link').value.trim(), name: $('itemName').value.trim(), note: $('itemNote').value.trim(), priority } });
+    data = j; $('addForm').reset(); priority = 2; for (const x of $('stars').children) x.classList.toggle('on', x.dataset.p === '2'); renderKids(); toast('Added to ' + me + '’s list! 🎉');
+  } catch (err) { toast(err.message); }
+  btn.disabled = false; btn.textContent = 'Add to wish list';
+};
+
+$('pinForm').onsubmit = async e => {
+  e.preventDefault();
+  pin = $('pin').value.trim();
+  try {
+    data = await api(`/api/f/${code}/auth`, { method: 'POST', parent: true });
+    try { sessionStorage.setItem('al_pin', pin) } catch {}
+    $('pin').value = ''; kidDraft = null; draftDirty = false; renderParent();
+  } catch (err) { pin = null; toast(err.message); }
+};
+$('pSort').onchange = renderParent;
+$('lockBtn').onclick = () => { pin = null; try { sessionStorage.removeItem('al_pin') } catch {} renderParent(); };
+$('leaveBtn').onclick = () => { if (confirm('Leave this family on this device? (Nothing is deleted.)')) leave(); };
+$('addKid').onclick = () => { const n = $('newKid').value.trim(); if (!n) return; if (!kidDraft) kidDraft = data.children.map(c => ({ from: c, name: c })); draftDirty = true; kidDraft.push({ from: null, name: n }); $('newKid').value = ''; renderKidEdit(); };
+$('saveKids').onclick = async () => {
+  const renames = {};
+  for (const k of kidDraft) if (k.from && k.name.trim() && k.from !== k.name.trim()) renames[k.from] = k.name.trim();
+  const ok = await parentAct('/children', 'PUT', { children: kidDraft.map(k => k.name.trim()).filter(Boolean), renames }, 'Kids saved');
+  if (ok) { kidDraft = null; draftDirty = false; renderParent(); }
+};
+$('savePin').onclick = async () => {
+  const p = $('newPin2').value.trim();
+  if (!/^\d{4,8}$/.test(p)) return toast('PIN must be 4–8 digits');
+  if (await parentAct('/pin', 'PUT', { pin: p }, 'PIN changed')) { pin = p; try { sessionStorage.setItem('al_pin', p) } catch {} $('newPin2').value = ''; }
+};
+const baseUrl = () => location.origin + location.pathname;
+async function shareOrCopy(url, title) {
+  if (navigator.share) { try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { prompt('Copy this link', url); }
+}
+$('shareKid').onclick = () => shareOrCopy(baseUrl() + '?f=' + code, 'Our family wish list');
+$('shareParent').onclick = () => shareOrCopy(baseUrl() + '?f=' + code + '&view=parent', 'Wish List — parent');
+
+// ---------- start ----------
+const linkCode = (qs.get('f') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+if (linkCode.length === 8) join(linkCode);
+if (qs.has('f') || qs.has('view')) {
+  const keep = apiOverride ? '?api=' + encodeURIComponent(apiOverride) : '';
+  history.replaceState(null, '', location.pathname + keep);
+}
+if (code) { show(qs.get('view') === 'parent' || (!qs.has('f') && ls.get('al_view') === 'parent') ? 'parent' : 'kids'); load(); }
+else show('setup');
+setInterval(() => { if (code && document.visibilityState === 'visible') load(true); }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && code) load(true); });
+})();
+</script>
+</body>
+</html>

@@ -1,18 +1,17 @@
-# Deploy AmazonList
+# Deploy
 
-## GitHub Pages
-1. Open repository **Settings → Pages**.
-2. Under **Build and deployment**, select **GitHub Actions**.
-3. Push to main or run **Deploy AmazonList to GitHub Pages** from Actions.
-4. When the workflow succeeds, open the URL displayed in the deployment.
+## Website (GitHub Pages)
+Pushing to `main` runs **Deploy AmazonList to GitHub Pages**.
 
-Expected site URL (only after deployment succeeds):
-https://keubanks16.github.io/AmazonList/
+## API (Cloudflare Worker) — one-time setup
+1. In Cloudflare, create an API token with the **Edit Cloudflare Workers** template.
+2. In this repo: **Settings → Secrets and variables → Actions → New repository secret**:
+   - `CLOUDFLARE_API_TOKEN` — the token
+   - `CLOUDFLARE_ACCOUNT_ID` — from the Cloudflare dashboard (Workers & Pages → right sidebar)
+3. **Actions → Deploy AmazonList API (Cloudflare Worker) → Run workflow.**
 
-## Important limitations
-This is a browser-local prototype. Lists do **not** sync between different devices.
-The parent PIN is not secure authentication and must not be relied upon to prevent a child with device access from bypassing restrictions.
-There is no Amazon account connection, no automatic Amazon cart/list write, and no checkout.
-Do not give children access to a signed-in Amazon browser session.
+The KV namespace `amazonlist` (id in `worker/wrangler.toml`) already exists.
+After deploy, https://amazonlist.kollinmeubanks.workers.dev should return `{"ok":true,"app":"AmazonList API"}`.
 
-Before using this as a family service, add secure accounts, a cloud database, access rules, and a supported Amazon integration if one becomes available.
+## Local testing
+Open `index.html?api=http://localhost:8787` against `wrangler dev` in `worker/`.
