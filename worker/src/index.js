@@ -240,6 +240,10 @@ async function resolveAmazon(raw) {
     if (!isAmazonHost(u.hostname)) fail('Only Amazon.com links work here');
     const asin = asinFrom(u);
     if (asin && /amazon\.com$/i.test(u.hostname)) return 'https://www.amazon.com/dp/' + asin;
+    // Search link (used when Amazon only shared the product title)
+    const k = u.searchParams.get('k');
+    if (/amazon\.com$/i.test(u.hostname) && u.pathname === '/s' && k && k.trim())
+      return 'https://www.amazon.com/s?k=' + encodeURIComponent(k.trim().slice(0, 140));
     // Short links (a.co / amzn.to) — follow the redirect without loading the page.
     const r = await fetch(u.toString(), { method: 'GET', redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0 AmazonList' } });
     const loc = r.headers.get('Location');
