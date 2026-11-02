@@ -1,0 +1,10 @@
+{
+  "name": "AmazonList Family",
+  "short_name": "AmazonList",
+  "description": "Parent-controlled family wishlist",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f6fa",
+  "theme_color": "#172b49",
+  "icons": []
+}
