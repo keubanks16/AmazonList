@@ -166,8 +166,10 @@ hr{border:0;border-top:1px solid var(--line);margin:16px 0}
       <ol class="steps" style="color:var(--ink)">
         <li>Tap <b>Copy setup link</b> below.</li>
         <li>Open the <b>Shortcuts</b> app → <b>+</b>. Name it <b>Add to Wish List</b> and turn on <b>Show in Share Sheet</b>.</li>
-        <li>Add the action <b>Copy to Clipboard</b>. It should say “Copy <b>Shortcut Input</b> to clipboard”.</li>
-        <li>Add the action <b>Open URLs</b>, tap its box and <b>paste</b> the setup link. Nothing else to add.</li>
+        <li>Add the action <b>Get URLs from Input</b> (“Get URLs from <b>Shortcut Input</b>”).</li>
+        <li>Add the action <b>Copy to Clipboard</b>. It should say “Copy <b>URLs</b> to clipboard”.</li>
+        <li>Add the action <b>URL</b> and <b>type</b> the setup link into it (pasting can break it).</li>
+        <li>Add the action <b>Open URLs</b>. It fills in <b>URL</b> by itself.</li>
         <li>On an Amazon item: <b>Share</b> → scroll down → <b>Add to Wish List</b>. When this page opens, tap the glowing <b>📋 Paste link</b> button.</li>
       </ol>
     </div>
@@ -462,8 +464,28 @@ function takeLink(text) {
   if (title && !$('itemName').value.trim()) $('itemName').value = title;
   if (!$('itemName').value.trim()) $('itemName').focus();
 }
+async function readClipboard() {
+  // Amazon/Shortcuts can put the link in a separate "URL" or HTML slot from the plain text, so check them all.
+  let text = '', link = '';
+  if (navigator.clipboard.read) {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+          if (!/^text\/(plain|uri-list|html)$/.test(type)) continue;
+          const v = await (await item.getType(type)).text();
+          if (type === 'text/plain') text = text || v;
+          else if (type === 'text/uri-list') link = link || v.split(/\r?\n/).find(l => /^https?:/.test(l)) || '';
+          else if (!link) { const m = v.match(/href=["'](https?:[^"']+)/i); if (m) link = m[1].replace(/&amp;/g, '&'); }
+        }
+      }
+    } catch {}
+  }
+  if (!text && !link) text = await navigator.clipboard.readText();
+  if (link && !/https?:\/\//.test(text)) text = (text + ' ' + link).trim();
+  return text;
+}
 $('pasteBtn').onclick = async () => {
-  try { const t = await navigator.clipboard.readText(); if (!t) throw 0; takeLink(t); }
+  try { const t = await readClipboard(); if (!t) throw 0; takeLink(t); }
   catch { $('link').focus(); toast('Tap the box and choose Paste'); }
 };
 $('link').addEventListener('paste', e => {
