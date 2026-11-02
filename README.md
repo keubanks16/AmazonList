@@ -16,7 +16,7 @@ Live: https://keubanks16.github.io/AmazonList/
 | `index.html` | The whole app (GitHub Pages) |
 | `worker/` | API at `https://amazonlist.kollinmeubanks.workers.dev` (Cloudflare Worker, KV namespace `amazonlist`) |
 | `.github/workflows/pages.yml` | Deploys the site |
-| `.github/workflows/worker.yml` | Deploys the Worker when `worker/` changes |
+| Cloudflare Workers Builds | Deploys `worker/` automatically from GitHub |
 
 ## Safety notes
 - The parent PIN is hashed (PBKDF2) on the server, and 5 wrong tries locks parent access for 15 minutes.
