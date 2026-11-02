@@ -165,11 +165,10 @@ hr{border:0;border-top:1px solid var(--line);margin:16px 0}
       <p class="muted">One-time setup on each kid's iPhone or iPad (a parent can do it). After that, on any Amazon item they tap <b>Share → Add to Wish List</b>, and this page opens with the item already filled in.</p>
       <ol class="steps" style="color:var(--ink)">
         <li>Tap <b>Copy setup link</b> below.</li>
-        <li>Open the <b>Shortcuts</b> app → <b>+</b> (new shortcut). Name it <b>Add to Wish List</b>.</li>
-        <li>Tap the <b>ⓘ</b> (or settings) button and turn on <b>Show in Share Sheet</b>. Set it to receive <b>URLs</b>, <b>Text</b> and <b>Safari web pages</b>.</li>
-        <li>Add the action <b>URL Encode</b>. It should say “URL Encode <b>Shortcut Input</b>”.</li>
-        <li>Add the action <b>Open URLs</b>. Tap its box, paste the setup link, then right after it insert the <b>URL Encoded Text</b> variable.</li>
-        <li>Done! Test it on an Amazon item: <b>Share</b> → scroll the apps row → <b>Add to Wish List</b>.</li>
+        <li>Open the <b>Shortcuts</b> app → <b>+</b>. Name it <b>Add to Wish List</b> and turn on <b>Show in Share Sheet</b>.</li>
+        <li>Add the action <b>Copy to Clipboard</b>. It should say “Copy <b>Shortcut Input</b> to clipboard”.</li>
+        <li>Add the action <b>Open URLs</b>, tap its box and <b>paste</b> the setup link. Nothing else to add.</li>
+        <li>On an Amazon item: <b>Share</b> → scroll down → <b>Add to Wish List</b>. When this page opens, tap the glowing <b>📋 Paste link</b> button.</li>
       </ol>
     </div>
     <p class="muted" id="quickAndroid">On Android: open this page in Chrome → ⋮ → <b>Add to Home screen</b> / <b>Install</b>. Then <b>Wish List</b> shows up in Amazon's Share menu.</p>
@@ -513,7 +512,7 @@ $('savePin').onclick = async () => {
   if (await parentAct('/pin', 'PUT', { pin: p }, 'PIN changed')) { pin = p; try { sessionStorage.setItem('al_pin', p) } catch {} $('newPin2').value = ''; }
 };
 const baseUrl = () => location.origin + location.pathname;
-const quickLink = () => baseUrl() + '?f=' + code + '&kid=' + encodeURIComponent(me || '') + '&add=';
+const quickLink = () => baseUrl() + '?f=' + code + '&kid=' + encodeURIComponent(me || '') + '&add=clip';
 $('copyQuick').onclick = async () => {
   try { await navigator.clipboard.writeText(quickLink()); toast('Setup link copied'); } catch { prompt('Copy this link', quickLink()); }
 };
@@ -532,10 +531,21 @@ const linkCode = (qs.get('f') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 if (linkCode.length === 8) join(linkCode);
 // Something shared in from Amazon (iPhone Shortcut uses ?add=, Android share uses ?title=&text=&url=)
 let pendingShare = [qs.get('add'), qs.get('title'), qs.get('text'), qs.get('url')].filter(Boolean).join(' ').trim();
+let pendingClip = qs.has('add') && !/https?:\/\//.test(pendingShare);
 if (!/https?:\/\//.test(pendingShare)) pendingShare = '';
 const linkKid = qs.get('kid');
 if (linkKid) { me = linkKid; ls.set('al_kid', linkKid); }
 function applyShare() {
+  if (pendingClip && code) {
+    // Shortcut copied the Amazon item; iOS needs a tap before a page can read the clipboard.
+    pendingClip = false;
+    show('kids');
+    $('addForm').reset();
+    $('addCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('pasteBtn').animate([{ boxShadow: '0 0 0 0 #ffb73d' }, { boxShadow: '0 0 0 8px #ffb73d00' }], { duration: 1100, iterations: 6 });
+    toast('Tap 📋 Paste link to add it!');
+    return;
+  }
   if (!pendingShare || !code) return;
   const t = pendingShare; pendingShare = '';
   show('kids');
@@ -549,7 +559,7 @@ if (['f', 'view', 'kid', 'add', 'title', 'text', 'url'].some(k => qs.has(k))) {
   const keep = apiOverride ? '?api=' + encodeURIComponent(apiOverride) : '';
   history.replaceState(null, '', location.pathname + keep);
 }
-if (code) { show(!pendingShare && (qs.get('view') === 'parent' || (!qs.has('f') && ls.get('al_view') === 'parent')) ? 'parent' : 'kids'); load().then(applyShare); }
+if (code) { show(!pendingShare && !pendingClip && (qs.get('view') === 'parent' || (!qs.has('f') && ls.get('al_view') === 'parent')) ? 'parent' : 'kids'); load().then(applyShare); }
 else show('setup');
 setInterval(() => { if (code && document.visibilityState === 'visible') load(true); }, 20000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && code) load(true); });
