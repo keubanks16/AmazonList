@@ -309,7 +309,7 @@ function render() {
 }
 
 function itemCard(x, admin) {
-  const link = el('a', { class: 'amz', href: x.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open on Amazon ↗');
+  const link = el('a', { class: 'amz', href: x.url, target: '_blank', rel: 'noopener noreferrer' }, x.url.includes('/s?k=') ? 'Find on Amazon 🔎' : 'Open on Amazon ↗');
   const card = el('div', { class: 'item' },
     el('div', { class: 'top' },
       admin ? el('span', { class: 'badge', style: `background:${colorFor(x.child)};color:#fff` }, x.child) : null,
@@ -457,9 +457,18 @@ const amazonSearch = q => window.open('https://www.amazon.com/s?k=' + encodeURIC
 $('amzSearch').onsubmit = e => { e.preventDefault(); const q = $('amzQ').value.trim(); if (q) amazonSearch(q); };
 $('cats').onclick = e => { const b = e.target.closest('button[data-q]'); if (b) amazonSearch(b.dataset.q); };
 
+const searchUrl = q => 'https://www.amazon.com/s?k=' + encodeURIComponent(q.replace(/\s+/g, ' ').trim().slice(0, 140));
 function takeLink(text) {
   const { url, title } = splitShare(text);
-  if (!url) { toast('That doesn’t have a link in it'); return; }
+  if (!url) {
+    // Amazon sometimes shares only the product title. Save it as a search for that exact title.
+    const name = text.replace(/\s+/g, ' ').trim();
+    if (name.length < 3) { toast('Nothing to paste — copy the item on Amazon first'); return; }
+    $('link').value = searchUrl(name);
+    if (!$('itemName').value.trim()) $('itemName').value = name.slice(0, 140);
+    toast('Got the name! Tap Add 👍');
+    return;
+  }
   $('link').value = url;
   if (title && !$('itemName').value.trim()) $('itemName').value = title;
   if (!$('itemName').value.trim()) $('itemName').focus();
@@ -500,6 +509,8 @@ $('stars').onclick = e => {
 $('addForm').onsubmit = async e => {
   e.preventDefault();
   if (!me) return toast('Pick who is shopping first');
+  const raw = $('link').value.trim();
+  if (raw && !/https?:\/\//.test(raw)) { if (!$('itemName').value.trim()) $('itemName').value = raw.slice(0, 140); $('link').value = searchUrl(raw); }
   const btn = $('addBtn'); btn.disabled = true; btn.textContent = 'Adding…';
   try {
     const j = await api(`/api/f/${code}/items`, { method: 'POST', body: {
